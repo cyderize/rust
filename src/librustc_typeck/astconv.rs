@@ -516,8 +516,15 @@ pub fn instantiate_poly_trait_ref<'tcx>(
 {
     let mut projections = Vec::new();
 
+    // the trait reference introduces a binding level here, so
+    // we need to shift the `rscope`. It'd be nice if we could
+    // do away with this rscope stuff and work this knowledge
+    // into resolve_lifetimes, as we do with non-omitted
+    // lifetimes. Oh well, not there yet.
+    let shifted_rscope = ShiftedRscope::new(rscope);
+
     let trait_ref =
-        instantiate_trait_ref(this, rscope, &ast_trait_ref.trait_ref,
+        instantiate_trait_ref(this, &shifted_rscope, &ast_trait_ref.trait_ref,
                               self_ty, Some(&mut projections));
 
     for projection in projections.into_iter() {
@@ -573,13 +580,6 @@ fn ast_path_to_trait_ref<'a,'tcx>(
     debug!("ast_path_to_trait_ref {:?}", path);
     let trait_def = this.get_trait_def(trait_def_id);
 
-    // the trait reference introduces a binding level here, so
-    // we need to shift the `rscope`. It'd be nice if we could
-    // do away with this rscope stuff and work this knowledge
-    // into resolve_lifetimes, as we do with non-omitted
-    // lifetimes. Oh well, not there yet.
-    let shifted_rscope = ShiftedRscope::new(rscope);
-
     let (regions, types, assoc_bindings) = match path.segments.last().unwrap().parameters {
         ast::AngleBracketedParameters(ref data) => {
             // For now, require that parenthetical notation be used
@@ -595,7 +595,7 @@ fn ast_path_to_trait_ref<'a,'tcx>(
                             the crate attributes to enable");
             }
 
-            convert_angle_bracketed_parameters(this, &shifted_rscope, data)
+            convert_angle_bracketed_parameters(this, rscope, data)
         }
         ast::ParenthesizedParameters(ref data) => {
             // For now, require that parenthetical notation be used
@@ -616,7 +616,7 @@ fn ast_path_to_trait_ref<'a,'tcx>(
     };
 
     let substs = create_substs_for_ast_path(this,
-                                            &shifted_rscope,
+                                            rscope,
                                             path.span,
                                             &trait_def.generics,
                                             self_ty,
